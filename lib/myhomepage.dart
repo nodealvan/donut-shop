@@ -12,12 +12,11 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin { // Change here
   final PageController _pageController = PageController();
   double _currentPage = 0;
-  bool _isAfter = false;
-  late AnimationController _animationController;
-  late Animation<double> _bounceAnimation;
+  final Map<int, bool> _itemIsAfter = {}; // Track which items are animated
+  final Map<int, AnimationController> _animationControllers = {}; // Track animation controllers for each item
   final Map<String, int> _itemCounts = {};
 
   @override
@@ -28,14 +27,15 @@ class _MyHomePageState extends State<MyHomePage>
         _currentPage = _pageController.page ?? 0;
       });
     });
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
-    _bounceAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.elasticOut,
-    );
+
+    for (int i = 0; i < drinks.length; i++) {
+      final controller = AnimationController(
+        duration: const Duration(milliseconds: 2000),
+        vsync: this,
+      );
+      _animationControllers[i] = controller;
+      _itemIsAfter[i] = false; // Initialize all items to not animated
+    }
 
     for (var drink in drinks) {
       final drinkName = drink['name'];
@@ -48,7 +48,7 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   void dispose() {
     _pageController.dispose();
-    _animationController.dispose();
+    _animationControllers.values.forEach((controller) => controller.dispose());
     super.dispose();
   }
 
@@ -59,11 +59,11 @@ class _MyHomePageState extends State<MyHomePage>
         .format(amount * 1000);
   }
 
-  void _onGetItPressed() {
+  void _onGetItPressed(int index) {
     setState(() {
-      _isAfter = true;
+      _itemIsAfter[index] = true;
     });
-    _animationController.forward().then((_) {
+    _animationControllers[index]?.forward().then((_) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           elevation: 0,
@@ -76,9 +76,9 @@ class _MyHomePageState extends State<MyHomePage>
           ),
         ),
       );
-      _animationController.reverse().then((_) {
+      _animationControllers[index]?.reverse().then((_) {
         setState(() {
-          _isAfter = false;
+          _itemIsAfter[index] = false;
         });
       });
     });
@@ -104,12 +104,10 @@ class _MyHomePageState extends State<MyHomePage>
       appBar: AppBar(
         toolbarHeight: 130,
         title: Center(
-          child: Center(
-            child: Image.asset(
-              'assets/images/donuts-logo.png',
-              width: 100,
-              height: 100,
-            ),
+          child: Image.asset(
+            'assets/images/donuts-logo.png',
+            width: 100,
+            height: 100,
           ),
         ),
       ),
@@ -125,10 +123,9 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               image: DecorationImage(
                 image: AssetImage('assets/images/background.jpg'),
-                fit: BoxFit
-                    .cover, // This ensures the image covers the entire container
+                fit: BoxFit.cover, // Ensures the image covers the entire container
                 colorFilter: ColorFilter.mode(
-                  Colors.black38, // Adjust the opacity level here
+                  Colors.black38, // Adjusts the opacity level
                   BlendMode.srcOver,
                 ),
               ),
@@ -150,6 +147,9 @@ class _MyHomePageState extends State<MyHomePage>
                 final drink = drinks[index];
                 final rotation = (_currentPage - index).abs();
                 final drinkName = drink['name'] ?? 'Unnamed Drink';
+                final isAfter = _itemIsAfter[index] ?? false;
+                final animationController = _animationControllers[index];
+
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -169,18 +169,18 @@ class _MyHomePageState extends State<MyHomePage>
                             return ScaleTransition(
                                 scale: animation, child: child);
                           },
-                          child: _isAfter
+                          child: isAfter
                               ? ScaleTransition(
-                                  scale: _bounceAnimation,
+                                  scale: animationController!,
                                   child: Image.asset(
                                     'assets/images/box.png',
-                                    key: const ValueKey<String>('afterImage'),
+                                    key: ValueKey('afterImage_$index'),
                                     height: 250,
                                   ),
                                 )
                               : Image.asset(
                                   drink['image']!,
-                                  key: const ValueKey<String>('beforeImage'),
+                                  key: ValueKey('beforeImage_$index'),
                                   height: 250,
                                 ),
                         ),
@@ -278,7 +278,7 @@ class _MyHomePageState extends State<MyHomePage>
                             ),
                             const SizedBox(height: 15),
                             GestureDetector(
-                              onTap: _onGetItPressed,
+                              onTap: () => _onGetItPressed(index),
                               child: Container(
                                 height: 40,
                                 width: 320,
